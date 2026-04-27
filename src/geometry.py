@@ -3,74 +3,85 @@ import math
 
 def calculate_tangent_point_ecef(pos_km, vel_km, alpha_deg, r_earth_km=6371.0):
     """
-    已知卫星在地固系下的位置和速度，计算侧向观测切点的经纬高。
+    高精度侧向观测切点解算 (符合客户要求的非地表切点逻辑)。
     
     参数:
     pos_km: [X, Y, Z] 卫星在地固系(ECEF)下的坐标 (km)
     vel_km: [Vx, Vy, Vz] 卫星在地固系下的速度向量 (km/s)
-    alpha_deg: 相机视线的下俯角 (度)
+    alpha_deg: 相机中心光轴的下俯角 (度)
     
     返回:
-    dict: 包含经度、纬度、切点高度和直线探测距离
+    dict: 包含经度、纬度、切点高度、探测距离及高精度光程参考
     """
     pos = np.array(pos_km)
     vel = np.array(vel_km)
     
     # 1. 建立局部轨道坐标系 (Local Orbital Frame)
-    # 天底方向 (指向地心)
     u_nadir = -pos / np.linalg.norm(pos)
     
-    # 严格的水平沿轨方向 (排除掉轨道偏心率导致的径向速度)
+    # 提取水平速度分量，构造沿轨向量
     v_horizontal = vel - np.dot(vel, u_nadir) * u_nadir
     u_along = v_horizontal / np.linalg.norm(v_horizontal)
     
-    # 侧向 (Cross-track) = 沿轨 × 天底 (满足右手定则)
+    # 构造侧向向量 (Cross-track)
     u_cross = np.cross(u_along, u_nadir)
     
-    # 2. 构造视线向量 (Line of Sight)
-    # 满足"速度与观测垂直"的约束，视线在 u_cross 和 u_nadir 平面内
+    # 2. 构造视线向量 (Line of Sight, LOS)
     alpha_rad = math.radians(alpha_deg)
+    # 视线由侧向向量向下俯冲 alpha 角度
     u_los = math.cos(alpha_rad) * u_cross + math.sin(alpha_rad) * u_nadir
     
-    # 3. 计算切点 (射线上距离地心最近的点)
-    # 投影距离 d = - (位置向量 · 视线向量)
+    # 3. 计算切点 (Tangent Point)
+    # 这里的几何逻辑：在 3D 空间中寻找射线上距离地心最近的点
+    # 该点与地心的连线必然垂直于视线向量 u_los
     d_tangent = -np.dot(pos, u_los)
-    
-    # 切点三维坐标 (ECEF)
     tangent_pos = pos + d_tangent * u_los
     
-    # 4. ECEF 坐标转经纬度 (使用球体近似)
+    # 4. 计算切点物理参数
     r_tangent = np.linalg.norm(tangent_pos)
-    h_tg = r_tangent - r_earth_km
+    h_tg = r_tangent - r_earth_km  # 这就是公式中的 H_t
     
+    # 5. 坐标转换 (ECEF -> LLA)
+    # 纬度计算
     lat_rad = math.asin(tangent_pos[2] / r_tangent)
+    # 经度计算
     lon_rad = math.atan2(tangent_pos[1], tangent_pos[0])
     
     return {
         'lat': math.degrees(lat_rad),
         'lon': math.degrees(lon_rad),
-        'h_tg': h_tg,
-        'distance': d_tangent
+        'h_tg': h_tg,          # 探测点高度 (km)
+        'distance': d_tangent, # 卫星到切点的直线距离 (km)
+        'r_tg_vec': tangent_pos # 返回切点矢量用于后续更复杂的积分
     }
 
-# --- 测试模块 (追加在 __main__ 中) ---
+def calculate_path_length_high_precision(h_tg, delta_h, r_earth_km=6371.0):
+    """
+    回应客户要求的高精度光程计算公式：
+    (R_e + H_t)^2 + (L/2)^2 = (R_e + H_t + delta_h)^2
+    """
+    r_base = r_earth_km + h_tg
+    r_outer = r_base + delta_h
+    
+    half_l_sq = r_outer**2 - r_base**2
+    if half_l_sq < 0: return 0.0
+    
+    return 2.0 * math.sqrt(half_l_sq)
+
+# --- 验证模块 ---
 if __name__ == "__main__":
-    # 我们用一个极简的赤道轨道来验证算法
-    # 假设卫星在赤道上空 500km，经度 0度，正向东飞行
-    test_pos = [6371.0 + 500.0, 0.0, 0.0]  # ECEF X轴上
-    test_vel = [0.0, 7.5, 0.0]             # 沿 Y轴正向飞 (向东)
+    # 模拟卫星：500km高度，赤道上空
+    test_pos = [6871.0, 0.0, 0.0]
+    test_vel = [0.0, 7.5, 0.0]
+    test_alpha = 10.98  # 使用之前的安全下俯角
     
-    # 测试下俯角 21.55 度
-    test_alpha = 21.55 
+    res = calculate_tangent_point_ecef(test_pos, test_vel, test_alpha)
     
-    result = calculate_tangent_point_ecef(test_pos, test_vel, test_alpha)
+    print(f"=== 客户级精度切点解算结果 ===")
+    print(f"切点经纬度: {res['lon']:.2f}°, {res['lat']:.2f}°")
+    print(f"切点高度 (H_t): {res['h_tg']:.2f} km")
+    print(f"直线探测距离: {res['distance']:.2f} km")
     
-    print(f"\n=== 三维侧向切点解算测试 ===")
-    print(f"输入卫星坐标: {test_pos} km (赤道, 本初子午线)")
-    print(f"输入飞行方向: 向东飞行")
-    print(f"相机侧视下俯角: {test_alpha} 度")
-    print("-" * 30)
-    print(f"输出切点纬度: {result['lat']:.2f} 度 (正代表北半球，负代表南半球)")
-    print(f"输出切点经度: {result['lon']:.2f} 度")
-    print(f"输出切点高度: {result['h_tg']:.2f} km")
-    print(f"直线探测距离: {result['distance']:.2f} km")
+    # 验证客户提到的光程逻辑
+    L = calculate_path_length_high_precision(res['h_tg'], delta_h=300.0)
+    print(f"在切点高度基础上，穿过300km厚度大气的路径长度: {L:.2f} km")
