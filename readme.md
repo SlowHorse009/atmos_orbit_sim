@@ -1,228 +1,105 @@
-# 🌍 AtmosOrbitSim: 卫星中高层大气临边探测全链路仿真系统
+# 🛰️ Satellite Limb Observation Digital Twin (SLODT)
 
-## 📝 项目简介
-本项目是一个高精度的航天系统级仿真框架，专为 **中高层大气临边探测（Limb Sounding）** 任务设计。  
+### 基于 Orekit 与 WGS84 的临边大气探测高保真数字孪生系统
 
-系统融合了：
-- 轨道动力学（SGP4）
-- 三维侧扫高精度几何解算
-- 闭环动态姿态跟瞄
-- NRLMSISE-00 空间物理环境模型  
-
-实现了从**卫星平台 → 观测几何 → 大气切点 → 环境参数**的全链路数据推演。
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Orekit 12.x](https://img.shields.io/badge/Engine-Orekit_12.x-orange.svg)](https://www.orekit.org/)
+[![Geodesy-WGS84](https://img.shields.io/badge/Geodesy-WGS84-green.svg)](#)
 
 ---
 
-## ✨ 核心特性
+## 📖 项目简介
 
-### 🔁 动态闭环姿态跟瞄 (Dynamic Pitch Control)
-突破传统固定俯仰角设计，根据卫星真实轨道高度波动，实时计算并自适应调整下俯角 $\alpha$，确保视场最下边缘锁定在绝对安全高度（如 20 km），规避地表强光干扰。
+本项目是一个专门为**临边大气探测卫星（Limb Sounder）**设计的工业级全链路仿真平台。系统集成了高精度轨道动力学、严密的 WGS84 椭球体几何、动态姿态补偿算法以及三维矢量光学映射，能够精准模拟 600km 轨道卫星对 60km–150km 大气层的观测全过程。
 
----
+### 核心痛点解决
 
-### 📐 高精度光程与几何解算
-弃用传统“地表切点”近似，采用真实目标高度几何模型：
-
-$$
-(R_e + H_t)^2 + (L/2)^2 = (R_e + H_t + \Delta h)^2
-$$
-
-确保在大天顶角条件下，大气分层光程（Path Length）计算具有高物理精度。
+* **地球扁率修正**：彻底抛弃圆球体模型，采用 WGS84 椭球体解算，消除极地与赤道间高达 21km 的切点高度系统误差。
+* **硬件动态补偿**：内置补偿镜（Scanning Mirror）控制逻辑，自动吸收因轨道高度起伏带来的指向偏差。
+* **物理微振动模拟**：集成角秒级高频抖动（Jitter）与低频热漂移（Drift）模型，支撑精细化图像像质评估。
 
 ---
 
-### 🌌 微观物理环境感知
-内置 NRLMSISE-00 大气模型，可自动解算：
+## 🛠️ 环境配置
 
-- 卫星本体环境（用于原子氧剥蚀评估）
-- 视线切点环境（用于气辉反演）
+建议使用 Conda 管理环境以确保 Java 桥接库（JCC）的稳定性。
 
-输出参数包括：
-- 温度
-- 压强
-- 多组分数密度
+```bash
+# 创建环境
+conda create -n orbit_env python=3.10
+conda activate orbit_env
 
----
-
-### 📷 4K级光学传感器映射
-精确模拟 GSENSE4040 + 100mm 光学系统：
-
-- 分辨率：$4096 \times 4096$
-- 像元与大气垂直高度一一映射
+# 安装核心依赖
+pip install orekit
+pip install numpy pandas
+pip install pyproj
+```
 
 ---
 
-## 📂 项目结构
+## 📂 模块架构
 
-```text
+```plaintext
 atmos_orbit_sim/
 ├── src/
-│   ├── geometry.py     # 高精度 3D 侧向切点解算与光程计算
-│   ├── sensor.py       # GSENSE4040 光学传感器参数与 FOV 映射模型
-│   └── atmosphere.py   # NRLMSISE-00 物理环境解算与状态方程推导
-├── notebooks/
-│   ├── 01_fov_analysis.ipynb      # 视场角与安全下俯角验证
-│   ├── 02_orbit_propagation.ipynb # 轨道外推测试
-│   ├── 03_full_pipeline.ipynb     # 全链路仿真
-│   └── 04_visualization.ipynb     # 3D 可视化 (Plotly)
-├── integrated_mission_data.csv    # 全链路任务数据输出
+│   ├── orekit_generator.py   # 轨道动力学内核（支持 HPOP/数值积分）
+│   ├── geodesy_engine.py     # WGS84 大地测量与 3D 射线求交引擎
+│   ├── attitude_control.py   # 具备局部曲率感知的动态姿态控制器
+│   └── sensor_optics.py      # 三维矢量光学映射与 FOV 覆盖解算
+├── notebook/
+│   └── full_chain_sim.ipynb  # 全链路飞行推演集成示例
 └── README.md
 ```
 
 ---
 
-## 📐 核心算法与坐标系转换矩阵
+## 🚀 核心功能说明
 
-系统精度的核心在于严密的坐标变换链条：
+### 1. 轨道动力学 (orekit_generator)
 
----
+基于 ESA Orekit 实现。支持 HPOP（High-Precision Orbit Propagator），默认搭载 6×6 阶地球重力场模型，真实还原卫星在不均匀重力场中的“高度起伏”。
 
-### 1️⃣ 轨道历元解析 (TLE → TEME)
+### 2. WGS84 大地测量 (geodesy_engine)
 
-使用 SGP4 解析 TLE，得到：
+采用 ReferenceEllipsoid.getWgs84 模型。核心算法 `get_limb_tangent_lla` 通过 3D 向量投影法，在椭球面上寻找最严密的视线切点位置，输出切点经纬度。
 
-- 卫星位置 $\vec{R}$
-- 卫星速度 $\vec{V}$  
+### 3. 动态姿态控制 (attitude_control)
 
-坐标系：TEME（惯性系）
+模拟卫星“粗精复合指向”策略：
 
----
+* 粗指向：卫星本体预倾斜安装（如 68°）
+* 精补偿：根据当前纬度下的局部地球半径，实时计算补偿镜偏移角，死死咬住目标大气层高度
 
-### 2️⃣ 地球自转补偿 (TEME → ITRS / ECEF)
+### 4. 矢量光学模拟 (sensor_optics)
 
-引入 IERS 参数，转换为地固坐标系：
-
-- 位置向量：
-  $$
-  \vec{R}_{ecef} = [X, Y, Z]
-  $$
-- 速度向量：
-  $$
-  \vec{V}_{ecef} = [V_x, V_y, V_z]
-  $$
+摒弃传统的二维三角函数，采用 Vector3D 空间矢量运算。支持通过 FOV 或 焦距/靶面尺寸 双驱动初始化，输出最真实的大气探测高度覆盖范围。
 
 ---
 
-### 3️⃣ 构建局部轨道坐标系
+## 📊 快速使用示例
 
-在卫星质心建立正交基：
+```python
+from orekit_generator import OrekitOrbitGenerator
+from geodesy_engine import WGS84GeodesyEngine
+from attitude_control import DynamicAttitudeController
+from sensor_optics import LimbOpticsSimulator
 
-- **天底向量 (Nadir)**  
-  $$
-  \vec{U}_{nadir} = -\frac{\vec{R}}{|\vec{R}|}
-  $$
+# 1. 启动引擎并生成轨道
+orbit_sys = OrekitOrbitGenerator(prop_model='HPOP', a=6978137.0, e=0.001)
+df = orbit_sys.generate_ephemeris_dataframe(duration_sec=180)
 
-- **沿轨向量 (Along-track)**  
-  $$
-  \vec{V}_{horiz} = \vec{V} - (\vec{V} \cdot \vec{U}_{nadir})\vec{U}_{nadir}
-  $$
-  $$
-  \vec{U}_{along} = \frac{\vec{V}_{horiz}}{|\vec{V}_{horiz}|}
-  $$
+# 2. 初始化大地测量与光学
+geodesy = WGS84GeodesyEngine()
+optics = LimbOpticsSimulator(focal_length_mm=850.0, sensor_size_mm=32.5)
 
-- **侧向向量 (Cross-track)**  
-  $$
-  \vec{U}_{cross} = \vec{U}_{along} \times \vec{U}_{nadir}
-  $$
-
----
-
-### 4️⃣ 视线矢量与切点投影
-
-#### 视线方向（LOS）
-
-$$
-\vec{U}_{los} = \cos(\alpha)\vec{U}_{cross} + \sin(\alpha)\vec{U}_{nadir}
-$$
-
----
-
-#### 切点距离
-
-$$
-D_{tangent} = -\vec{R} \cdot \vec{U}_{los}
-$$
-
----
-
-#### 切点位置
-
-$$
-\vec{P}_{tangent} = \vec{R} + D_{tangent}\vec{U}_{los}
-$$
-
----
-
-最终输出：
-- 经度
-- 纬度
-- 切点高度 $H_t$
-
----
-
-## 🚀 快速开始
-
-### 🧩 环境依赖
-
-```bash
-pip install numpy pandas astropy sgp4 nrlmsise00 plotly
+# 3. 执行单点观测计算
+# 详情参考 notebook/full_chain_sim.ipynb
 ```
 
 ---
 
-### ▶️ 运行流程
+## 📝 开发者备注
 
-#### 1. 全链路仿真
-
-运行：
-
-```
-notebooks/03_full_pipeline.ipynb
-```
-
-输出：
-- `integrated_mission_data.csv`
-
----
-
-#### 2. 可视化
-
-运行：
-
-```
-notebooks/04_visualization.ipynb
-```
-
-功能：
-- 3D 地球
-- 卫星轨迹
-- 探测足迹热力图
-
----
-
-## 📊 数据输出说明
-
-| 字段名称 | 单位 | 描述 |
-|----------|------|------|
-| Sat_Alt_km | km | 卫星实时轨道高度 |
-| Pitch_Deg | ° | 动态下俯角 |
-| Sat_Temp_K | K | 卫星环境温度 |
-| Target_Alt_km | km | 切点高度 |
-| Target_Press_Pa | Pa | 切点气压 |
-| Target_Temp_K | K | 切点温度 |
-
----
-
-## 🎯 项目目标
-
-构建一个用于：
-
-- 高精度临边探测任务设计  
-- 气辉反演算法验证  
-- 卫星载荷性能评估  
-
-的**工程级仿真平台**
-
----
-
-**Developed for High-Precision Limb Sounding Mission Simulation 🚀**
+* **JVM 初始化**：本项目依赖 Java 虚拟机，运行前必须确保执行了 `orekit.initVM()`
+* **坐标系一致性**：所有计算均在 ECEF（地固坐标系）下进行，以确保与遥感后处理流程无缝对接
+* **Git 提交注意**：本项目已移除旧的 nbstripout 过滤器，提交时请确保 `.ipynb` 文件的版本整洁
