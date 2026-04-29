@@ -6,7 +6,12 @@ import orekit
 from orekit.pyhelpers import setup_orekit_curdir, download_orekit_data_curdir
 
 # 初始化 Orekit 虚拟机 (JVM)
-vm = orekit.initVM()
+# 检查当前是否已经存在 Java 虚拟机环境
+if orekit.getVMEnv() is None:
+    print("[SYSTEM] 正在启动底层 JVM 引擎...")
+    orekit.initVM()
+else:
+    print("[SYSTEM] JVM 引擎已在运行。")
 
 if not os.path.isfile('orekit-data.zip'):
     print("正在下载 orekit-data.zip (约几十MB，仅首次需下载)...")
@@ -47,7 +52,7 @@ class OrekitOrbitGenerator:
                  gravity_degree=6, gravity_order=6, mass=1000.0):
         """
         :param prop_model: 选择传播器模型 
-               ['KEPLERIAN', 'EH', 'BL', 'SGP4', 'HPOP', 'DSST']
+               ['KEPLERIAN', 'BL', 'SGP4', 'HPOP', 'DSST']
         :param a, e, i, raan, arg_pe, m0: 开普勒六根数 (SGP4 模式下可忽略)
         :param tle_line1, tle_line2: TLE 字符串 (仅 SGP4 模式需要)
         :param gravity_degree, gravity_order: 重力场阶数和次数

@@ -5,7 +5,8 @@ import numpy as np
 from org.orekit.models.earth import ReferenceEllipsoid # type: ignore
 from org.orekit.frames import FramesFactory # type: ignore
 from org.orekit.utils import IERSConventions # type: ignore
-from org.hipparchus.geometry.euclidean.threed import Vector3D # type: ignore
+from org.hipparchus.geometry.euclidean.threed import Vector3D, Line # type: ignore
+from org.orekit.bodies import CelestialBodyFactory # type: ignore
 
 class WGS84GeodesyEngine:
     """
@@ -18,6 +19,9 @@ class WGS84GeodesyEngine:
         
         # 实例化极其严密的 WGS84 标准参考椭球体
         self.earth = ReferenceEllipsoid.getWgs84(self.ecef_frame)
+
+        # 获取太阳天体对象
+        self.sun = CelestialBodyFactory.getSun()
 
     def get_sat_lla(self, x, y, z, date):
         """
@@ -67,3 +71,43 @@ class WGS84GeodesyEngine:
         t_alt = tangent_pt.getAltitude()
         
         return t_lat, t_lon, t_alt
+    
+    def is_in_eclipse(self, p_x, p_y, p_z, date):
+        """
+        判定空间给定点在指定时刻是否处于地影中 (考虑地球遮挡)
+        
+        :param p_x, p_y, p_z: 待测点的 ECEF 坐标
+        :param date: AbsoluteDate 时间
+        :return: bool (True 为在阴影中, False 为在日照中)
+        """
+        p_target = Vector3D(float(p_x), float(p_y), float(p_z))
+        
+        # 1. 获取太阳在 ECEF 系下的实时绝对坐标
+        sun_pos_ecef = self.sun.getPVCoordinates(date, self.ecef_frame).getPosition()
+        
+        # 2. 构建一根从“目标点”连向“太阳”的数学直线 (Line 对象, 1e-10 是容差)
+        line_of_sight = Line(p_target, sun_pos_ecef, 1e-10)
+        
+        # 3. 传入合法的 Line 对象，调用地球模型的严密相交算法
+        # 返回的是离 p_target 最近的那个表面交点 (GeodeticPoint)
+        intersection_gp = self.earth.getIntersectionPoint(
+            line_of_sight, p_target, self.ecef_frame, date
+        )
+        
+        # 连无限长的直线都没碰到地球，那绝对是毫无遮挡的日照区！
+        if intersection_gp is None:
+            return False
+            
+        # 4. 【排雷判定】必须确认这个交点是在“去往太阳的路上”，而不是在我们背后！
+        # 把交点的经纬度转回 ECEF 的 3D 坐标
+        inter_ecef = self.earth.transform(intersection_gp)
+        
+        # 算出向量：我们指向交点
+        vec_to_inter = inter_ecef.subtract(p_target)
+        # 算出向量：我们指向太阳
+        vec_to_sun = sun_pos_ecef.subtract(p_target)
+        
+        # 如果点乘大于0，说明交点和太阳在同一侧（确实挡住了光线）
+        is_same_direction = vec_to_inter.dotProduct(vec_to_sun) > 0
+        
+        return is_same_direction
