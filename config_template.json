@@ -15,7 +15,7 @@
     "mode": "DYNAMIC"
   },
   "environment": {
-    "enable_noise": true,
+    "enable_noise": false,
     "drift_arcsec_s": 0,
     "jitter_3sigma": 0
   },

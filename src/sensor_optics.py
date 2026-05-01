@@ -95,3 +95,36 @@ class LimbOpticsSimulator:
         )
         
         return alt_min, alt_max
+    
+    def apply_velocity_aberration(self, los_cmd_ecef, vel_ecef):
+        """
+        [新增物理模型] 一阶相对论光行差补偿 (Velocity Aberration)
+        
+        物理背景：卫星以约 7.5km/s 的速度飞行，光子抵达探测器的这段时间里，卫星已发生位移。
+        为了捕捉特定方向的光子，硬件镜头必须“提前”偏转一个微小角度。
+        
+        :param los_cmd_ecef: 硬件相机的表观指令视线 (Apparent LOS)
+        :param vel_ecef: 卫星当前绝对速度向量 (m/s)
+        :return: 补偿后的真实物理光线空间路径 (True LOS)
+        """
+        from org.orekit.utils import Constants # type: ignore
+        from org.hipparchus.geometry.euclidean.threed import Vector3D # type: ignore
+        
+        # 提取真空中光速 (约 2.9979 x 10^8 m/s)
+        c = Constants.SPEED_OF_LIGHT
+        
+        # 计算光行差微扰向量: v/c
+        v_over_c = Vector3D(1.0 / c, vel_ecef)
+        
+        # 几何反演：镜头指向 los_cmd，意味着接收到的光子其实来自 los_cmd - v/c 的方向
+        # 1. 先做减法，得到未归一化的偏移向量
+        los_physical_unnorm = los_cmd_ecef.subtract(v_over_c)
+        
+        # 2. 提取向量模长
+        norm = los_physical_unnorm.getNorm()
+        
+        # 3. 手动执行标量乘法实现归一化 (向量 * 1/模长)
+        los_physical = los_physical_unnorm.scalarMultiply(1.0 / norm)
+        
+        return los_physical
+    

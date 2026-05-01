@@ -8,6 +8,7 @@ from org.orekit.data import DataProvidersManager, ZipJarCrawler # type: ignore
 from java.io import File # type: ignore
 
 # 导入核心模块
+from org.orekit.utils import Constants # type: ignore
 from org.hipparchus.geometry.euclidean.threed import Vector3D # type: ignore
 from org.orekit.bodies import GeodeticPoint # type: ignore
 from .orekit_generator import OrekitOrbitGenerator
@@ -104,11 +105,22 @@ class SimulationEngine:
             pos_ecef = Vector3D(float(x), float(y), float(z))
             vel_ecef = Vector3D(float(vx), float(vy), float(vz))
             x_dir, _, z_dir = self.optics_sys._build_local_orbital_frame(pos_ecef, vel_ecef)
-            los_center = self.optics_sys._get_los_vector(x_dir, z_dir, actual_los)
             
-            # --- [大地测量] 靶心切点寻优 ---
+            # 这是相机的硬件表观指向 (大脑输出的指令)
+            los_cmd = self.optics_sys._get_los_vector(x_dir, z_dir, actual_los)
+            
+            # ==========================================
+            # [V2.0 环境物理真值] 宇宙引擎重现光行差与地球自转！
+            # ==========================================
+            earth_omega = Vector3D(0.0, 0.0, Constants.WGS84_EARTH_ANGULAR_VELOCITY)
+            vel_absolute_in_ecef = vel_ecef.add(Vector3D.crossProduct(earth_omega, pos_ecef))
+            
+            # 宇宙引擎计算进入镜头的真实物理光子路径
+            los_physical = self.optics_sys.apply_velocity_aberration(los_cmd, vel_absolute_in_ecef)
+            
+            # --- [大地测量] 靶心切点寻优 (必须用物理光线去求交！) ---
             tgt_lat, tgt_lon, tgt_alt_m_actual = self.geodesy_sys.get_limb_tangent_lla(
-                x, y, z, los_center.getX(), los_center.getY(), los_center.getZ(), date
+                x, y, z, los_physical.getX(), los_physical.getY(), los_physical.getZ(), date
             )
             
             # --- [环境探测] 卫星与切点的日照/阴影状态 ---
