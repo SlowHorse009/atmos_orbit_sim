@@ -119,7 +119,7 @@ class SimulationEngine:
             los_physical = self.optics_sys.apply_velocity_aberration(los_cmd, vel_absolute_in_ecef)
             
             # --- [大地测量] 靶心切点寻优 (必须用物理光线去求交！) ---
-            tgt_lat, tgt_lon, tgt_alt_m_actual = self.geodesy_sys.get_limb_tangent_lla(
+            tgt_lat, tgt_lon, tgt_alt_m_actual = self.geodesy_sys.get_limb_tangent_lla_brent(
                 x, y, z, los_physical.getX(), los_physical.getY(), los_physical.getZ(), date
             )
             

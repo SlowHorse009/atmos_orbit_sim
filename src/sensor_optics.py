@@ -82,13 +82,13 @@ class LimbOpticsSimulator:
         los_vec_top = self._get_los_vector(x_dir, z_dir, los_top_deg)
         
         # 4. 召唤 WGS84 引擎，执行最硬核的 3D 射线椭球求交
-        _, _, alt_min = geodesy_engine.get_limb_tangent_lla(
+        _, _, alt_min = geodesy_engine.get_limb_tangent_lla_brent(
             pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
             los_vec_bottom.getX(), los_vec_bottom.getY(), los_vec_bottom.getZ(),
             date
         )
         
-        _, _, alt_max = geodesy_engine.get_limb_tangent_lla(
+        _, _, alt_max = geodesy_engine.get_limb_tangent_lla_brent(
             pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
             los_vec_top.getX(), los_vec_top.getY(), los_vec_top.getZ(),
             date
