@@ -65,7 +65,7 @@ class DynamicAttitudeController:
             los_physical = optics_sys.apply_velocity_aberration(los_cmd, vel_absolute_in_ecef)
             
             # 3. 物理相交：用真实的光子路径去和 WGS84 椭球体求交！
-            _, _, alt_actual = geodesy_engine.get_limb_tangent_lla(
+            _, _, alt_actual = geodesy_engine.get_limb_tangent_lla_brent(
                 pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
                 los_physical.getX(), los_physical.getY(), los_physical.getZ(), 
                 date

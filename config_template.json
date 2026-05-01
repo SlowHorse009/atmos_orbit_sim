@@ -16,8 +16,8 @@
   },
   "environment": {
     "enable_noise": false,
-    "drift_arcsec_s": 0,
-    "jitter_3sigma": 0
+    "drift_arcsec_s": 0.05,
+    "jitter_3sigma": 2.0
   },
   "simulation": {
     "duration_sec": 180,
