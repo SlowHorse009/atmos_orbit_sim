@@ -1,0 +1,26 @@
+{
+  "orbit": {
+    "type": "HPOP",
+    "keplerian": {
+      "a": 6978137.0,
+      "e": 0.001,
+      "i": 97.79,
+      "raan": 0.0,
+      "arg_pe": 90.0,
+      "m0": 0.0
+    }
+  },
+  "payload": {
+    "target_alt_m": 400000.0,
+    "mode": "DYNAMIC"
+  },
+  "environment": {
+    "enable_noise": true,
+    "drift_arcsec_s": 0,
+    "jitter_3sigma": 0
+  },
+  "simulation": {
+    "duration_sec": 180,
+    "step_sec": 10
+  }
+}

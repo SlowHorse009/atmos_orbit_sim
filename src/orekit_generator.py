@@ -2,22 +2,6 @@ import os
 import pandas as pd
 import numpy as np
 
-import orekit
-from orekit.pyhelpers import setup_orekit_curdir, download_orekit_data_curdir
-
-# 初始化 Orekit 虚拟机 (JVM)
-# 检查当前是否已经存在 Java 虚拟机环境
-if orekit.getVMEnv() is None:
-    print("[SYSTEM] 正在启动底层 JVM 引擎...")
-    orekit.initVM()
-else:
-    print("[SYSTEM] JVM 引擎已在运行。")
-
-if not os.path.isfile('orekit-data.zip'):
-    print("正在下载 orekit-data.zip (约几十MB，仅首次需下载)...")
-    download_orekit_data_curdir()
-setup_orekit_curdir('orekit-data.zip')
-
 # --- 基础核心包 ---
 from org.orekit.orbits import KeplerianOrbit, PositionAngleType  # type: ignore
 from org.orekit.frames import FramesFactory  # type: ignore
