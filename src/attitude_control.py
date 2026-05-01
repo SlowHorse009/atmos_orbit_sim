@@ -44,11 +44,30 @@ class DynamicAttitudeController:
 
         def get_altitude_error(test_angle_deg):
             """内部闭环评估函数：输入测试俯角，返回与目标高度的误差(米)"""
+            from org.hipparchus.geometry.euclidean.threed import Vector3D # type: ignore
+            from org.orekit.utils import Constants # type: ignore
+            
+            # 1. 纯几何建模：计算硬件相机的表观物理朝向 (Apparent Direction)
+            # 注意：建系必须用 ECEF 相对速度，这样才能天然实现对地观测的 Yaw Steering
             x_dir, _, z_dir = optics_sys._build_local_orbital_frame(pos_ecef, vel_ecef)
-            los_vector = optics_sys._get_los_vector(x_dir, z_dir, test_angle_deg)
+            los_cmd = optics_sys._get_los_vector(x_dir, z_dir, test_angle_deg)
+            
+            # ==========================================
+            # [V2.0 终极修正] 在 ECEF 系下还原卫星的绝对惯性速度
+            # ==========================================
+            # 地球自转角速度向量 (在 ECEF 系下永远指向 Z 轴正方向)
+            earth_omega = Vector3D(0.0, 0.0, Constants.WGS84_EARTH_ANGULAR_VELOCITY)
+            
+            # v_absolute = v_relative + (omega x r)
+            vel_absolute_in_ecef = vel_ecef.add(Vector3D.crossProduct(earth_omega, pos_ecef))
+            
+            # 2. 相对论修正：用还原出的绝对速度去补偿光行差
+            los_physical = optics_sys.apply_velocity_aberration(los_cmd, vel_absolute_in_ecef)
+            
+            # 3. 物理相交：用真实的光子路径去和 WGS84 椭球体求交！
             _, _, alt_actual = geodesy_engine.get_limb_tangent_lla(
                 pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
-                los_vector.getX(), los_vector.getY(), los_vector.getZ(),
+                los_physical.getX(), los_physical.getY(), los_physical.getZ(), 
                 date
             )
             return alt_actual - target_alt_m
