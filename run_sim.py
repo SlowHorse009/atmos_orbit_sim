@@ -1,4 +1,7 @@
+# run_sim.py
 from src.simulation_engine import SimulationEngine
 
-engine = SimulationEngine() # 自动搞定 JVM 和路径
-file_path = engine.run_task("config_template.json") # 前端拿到跑完的 parquet 文件路径
+if __name__ == "__main__":
+    engine = SimulationEngine("configs/config_tc02_locked_forward.json")
+    engine.run_simulation()
+    # engine.export_analysis_report("tc02_results.csv")

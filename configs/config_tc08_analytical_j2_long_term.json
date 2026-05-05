@@ -1,0 +1,38 @@
+{
+  "orbit_propagation": {
+    "model": "ANALYTICAL",
+    "epoch_iso": "2026-05-01T12:00:00.000Z",
+    "duration_sec": 86400.0, 
+    "step_sec": 10.0,        
+    "a": 6878137.0,
+    "e": 0.001,
+    "i": 1.7016,
+    "raan": 0.0,
+    "arg_pe": 0.0,
+    "m0": 0.0,
+    "mass_kg": 1000.0,       
+    "perturbations": {
+      "gravity_degree": 5    
+    }
+  },
+  "payload_optics": {
+    "fov_deg": 2.0,
+    "focal_length_mm": null,
+    "sensor_size_mm": null,
+    "mounting_angles": {
+      "mount_roll_deg": 68.0,
+      "mount_pitch_deg": 0.0,
+      "mount_yaw_deg": 0.0
+    }
+  },
+  "attitude_control": {
+    "mode": "DYNAMIC",
+    "target_alt_km": 400.0,
+    "locked_angle_deg": null,
+    "perturbations": {
+      "enable_noise": true,
+      "drift_rate_arcsec_s": 0.01,
+      "jitter_3sigma_arcsec": 0.5
+    }
+  }
+}
