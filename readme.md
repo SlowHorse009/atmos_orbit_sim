@@ -125,6 +125,6 @@ python run_sim.py
 | slant_range_km     | Float   | 卫星至切点斜距（公里） |
 | fov_alt_min_km     | Float   | 视场下边界高度（公里） |
 | fov_alt_max_km     | Float   | 视场上边界高度（公里） |
-| in_eclipse         | Boolean | 是否处于地影           |
+| in_eclipse         | Boolean | 卫星是否处于地影           |
 
 ---
