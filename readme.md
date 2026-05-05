@@ -113,18 +113,18 @@ python run_sim.py
 | 字段名                | 类型      | 说明               |
 | ------------------ | ------- | ---------------- |
 | time_sec           | Float   | 仿真时间（秒）          |
-| sat_x / y / z      | Float   | J2000 惯性系三维坐标（米） |
+| sat_x / y / z      | Float   | 卫星在 WGS84 (ITRF) 地固系下的绝对三维坐标 (米)|
 | sat_lat / lon      | Float   | 星下点 WGS84 经纬度（度） |
 | sat_alt_km         | Float   | 卫星轨道高度（公里）       |
-| sat_roll_deg       | Float   | 滚转角（主控轴）         |
-| sat_pitch_deg      | Float   | 俯仰角（次控轴）         |
-| sat_yaw_deg        | Float   | 偏航角（像旋补偿）        |
+| sat_roll_deg       | Float   | 滚转角（度）         |
+| sat_pitch_deg      | Float   | 俯仰角（度）         |
+| sat_yaw_deg        | Float   | 偏航角（度）        |
 | attitude_noise_deg | Float   | 姿态噪声（度）          |
 | tangent_lat / lon  | Float   | 临边切点经纬度          |
-| tangent_alt_km     | Float   | 临边切点高度（核心目标）     |
-| slant_range_km     | Float   | 卫星至切点斜距          |
-| fov_alt_min_km     | Float   | 视场下边界高度          |
-| fov_alt_max_km     | Float   | 视场上边界高度（深空为 NaN） |
+| tangent_alt_km     | Float   | 临边切点高度（公里）     |
+| slant_range_km     | Float   | 卫星至切点斜距（公里） |
+| fov_alt_min_km     | Float   | 视场下边界高度（公里） |
+| fov_alt_max_km     | Float   | 视场上边界高度（公里） |
 | in_eclipse         | Boolean | 是否处于地影           |
 
 ---
