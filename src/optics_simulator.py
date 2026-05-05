@@ -22,16 +22,33 @@ class LimbOpticsSimulator:
         # ==========================================
         # 1. 视场解析逻辑
         # ==========================================
-        if fov_deg is not None:
+        has_fov = fov_deg is not None
+        has_lens = focal_length_mm is not None and sensor_size_mm is not None
+
+        # 冲突检测
+        if has_fov and has_lens:
+            raise ValueError(
+                "光学参数冲突：fov_deg 与 (focal_length_mm, sensor_size_mm) 不能同时提供"
+            )
+
+        # 模式 A：直接 FOV
+        if has_fov:
             self.fov_deg = float(fov_deg)
             self.fov_rad = math.radians(self.fov_deg)
-        elif focal_length_mm is not None and sensor_size_mm is not None:
+
+        # 模式 B：镜头推导
+        elif has_lens:
             self.f_mm = float(focal_length_mm)
             self.sensor_size_mm = float(sensor_size_mm)
+
             self.fov_rad = 2.0 * math.atan(self.sensor_size_mm / (2.0 * self.f_mm))
             self.fov_deg = math.degrees(self.fov_rad)
+
+        # 错误抛出
         else:
-            raise ValueError("缺少视场初始化参数！")
+            raise ValueError(
+                "缺少视场参数：必须提供 fov_deg 或 (focal_length_mm + sensor_size_mm)"
+            )
 
         # ==========================================
         # 2. 硬件静态安装角入表

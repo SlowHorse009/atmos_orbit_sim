@@ -94,7 +94,7 @@ class OrekitOrbitGenerator:
             if a is None:
                 raise ValueError(f"{self.prop_model} 模式必须传入完整的开普勒六根数！")
                 
-            # 优雅地解析前端传来的 ISO 时间字符串 (去掉可能带有的 Z 时区标识)
+            # 解析前端传来的 ISO 时间字符串 (去掉可能带有的 Z 时区标识)
             clean_epoch = epoch_iso.replace("Z", "")
             self.initial_date = AbsoluteDate(clean_epoch, self.utc)
             
