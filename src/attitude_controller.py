@@ -17,7 +17,7 @@ class DynamicAttitudeController:
     def __init__(self, 
                  mode: str = 'DYNAMIC', 
                  target_alt_km: float = 400.0, 
-                 locked_angle_deg: float = None, 
+                 locked_angle_deg: float = None,
                  enable_noise: bool = False,
                  drift_rate_arcsec_s: float = 0.05, 
                  jitter_3sigma_arcsec: float = 1.5, 
@@ -37,7 +37,7 @@ class DynamicAttitudeController:
         :param orbital_period_sec: 标称轨道周期，用于热漂移正弦建模 (秒)。
         """
         self.mode = mode.upper()
-        self.target_alt_m = (target_alt_km * 1000.0) if target_alt_km is not None else 400000.0
+        self.target_alt_m = (target_alt_km * 1000.0 if target_alt_km is not None else None)
         self.locked_angle_deg = locked_angle_deg
         
         self.enable_noise = enable_noise
@@ -46,8 +46,8 @@ class DynamicAttitudeController:
         self.orbital_period_sec = orbital_period_sec
 
         if self.mode not in ['DYNAMIC', 'LOCKED']:
-            raise ValueError(f"姿态控制器不支持的模式: {mode}")
-
+            raise ValueError(f"姿态控制器不支持的模式: {mode}")         
+           
         # [状态机与性能缓存]
         self._is_angle_locked = False
         if self.mode == 'LOCKED' and self.locked_angle_deg is not None:
