@@ -68,13 +68,34 @@ class SimulationEngine:
         )
 
         # 5. 实例化轨道动力学生成器
-        orb_cfg = self.config["orbit_propagation"]
         force_cfg = orb_cfg.get("perturbations", {})
+        # 默认认为前端传入的轨道角度为度（degrees），在这里统一转换成弧度以供 Orekit 使用。
+        def _deg_to_rad_if_present(val):
+            if val is None:
+                return None
+            try:
+                if isinstance(val, str):
+                    s = val.strip().lower().replace('°', '').replace('deg', '').strip()
+                    if s == '':
+                        return None
+                    return math.radians(float(s))
+                # 数值类型：按度处理，直接转换为弧度
+                if isinstance(val, (int, float)):
+                    return math.radians(float(val))
+            except Exception:
+                # 若解析失败，返回原始值以保守处理
+                return val
+
+        i_rad = _deg_to_rad_if_present(orb_cfg.get("i"))
+        raan_rad = _deg_to_rad_if_present(orb_cfg.get("raan"))
+        arg_pe_rad = _deg_to_rad_if_present(orb_cfg.get("arg_pe"))
+        m0_rad = _deg_to_rad_if_present(orb_cfg.get("m0"))
+
         self.orbit_sys = OrekitOrbitGenerator(
             prop_model=orb_cfg.get("model", "HPOP"),
             epoch_iso=orb_cfg.get("epoch_iso"),
-            a=orb_cfg.get("a"), e=orb_cfg.get("e"), i=orb_cfg.get("i"),
-            raan=orb_cfg.get("raan"), arg_pe=orb_cfg.get("arg_pe"), m0=orb_cfg.get("m0"),
+            a=orb_cfg.get("a"), e=orb_cfg.get("e"), i=i_rad,
+            raan=raan_rad, arg_pe=arg_pe_rad, m0=m0_rad,
             tle_line1=orb_cfg.get("tle_line1"), tle_line2=orb_cfg.get("tle_line2"),
             mass_kg=orb_cfg.get("mass_kg", 1000.0),
             cross_section_m2=orb_cfg.get("cross_section_m2", 5.0),
@@ -98,7 +119,7 @@ class SimulationEngine:
         print(f"[引擎配置] 仿真总时长设定为: {self.duration} 秒")
         print("[引擎就绪] 物理模型初始化完毕。")
 
-    def run_simulation(self, auto_export=True, output_filename="limb_sim_results.parquet"):
+    def run_simulation(self, progress_callback=None):
         """
         执行主推演循环，生成并缓存全量遥测数据
         """
@@ -108,7 +129,9 @@ class SimulationEngine:
         results = []
         total_steps = len(orbit_df)
         print("正在执行光电几何映射与靶心求交计算...")
-        
+        # 统计 FOV 上下界被反向的帧数（如果后端计算有时序问题可在此纠正）
+        self._fov_swapped_count = 0
+
         for index, row in orbit_df.iterrows():
             t = row['time_sec']
             x, y, z = row['x'], row['y'], row['z']
@@ -143,13 +166,35 @@ class SimulationEngine:
                 x, y, z, los_physical.getX(), los_physical.getY(), los_physical.getZ(), current_date
             )
             
-            in_eclipse = self.geodesy_sys.is_in_eclipse(
+            sat_in_eclipse = self.geodesy_sys.is_in_eclipse(
                 pos_v.getX(), pos_v.getY(), pos_v.getZ(), current_date
+            )
+
+            t_x = x + los_physical.getX() * slant_range_m
+            t_y = y + los_physical.getY() * slant_range_m
+            t_z = z + los_physical.getZ() * slant_range_m
+
+            tangent_in_eclipse = self.geodesy_sys.is_in_eclipse(
+                t_x, t_y, t_z, current_date
             )
             
             alt_min, alt_max = self.optics_sys.calculate_altitude_range(
                 x, y, z, vx, vy, vz, sat_roll, sat_pitch, sat_yaw, self.geodesy_sys, current_date
             )
+            # 确保 alt_min <= alt_max；若检测到反向则交换并计数（以便后续审计）
+            try:
+                if alt_min is not None and alt_max is not None:
+                    if not (isinstance(alt_min, float) or isinstance(alt_min, int)) or not (isinstance(alt_max, float) or isinstance(alt_max, int)):
+                        pass
+                    else:
+                        if math.isnan(alt_min) or math.isnan(alt_max):
+                            pass
+                        elif alt_min > alt_max:
+                            alt_min, alt_max = alt_max, alt_min
+                            self._fov_swapped_count = getattr(self, '_fov_swapped_count', 0) + 1
+            except Exception:
+                # 保守处理：若任何异常，保持原值继续
+                pass
             
             results.append({
                 "time_sec": t,
@@ -165,19 +210,23 @@ class SimulationEngine:
                 "slant_range_km": slant_range_m / 1000.0,
                 "fov_alt_min_km": alt_min / 1000.0,
                 "fov_alt_max_km": alt_max / 1000.0,
-                "in_eclipse": in_eclipse
+                "sat_in_eclipse": sat_in_eclipse,
+                "tangent_in_eclipse": tangent_in_eclipse
             })
             
-            if index > 0 and index % 1000 == 0:
-                print(f"   进度: {index}/{total_steps} 帧计算完成...")
+            if progress_callback and index % 50 == 0:
+                progress_callback(current=index, total=total_steps)
+                
+        if progress_callback:
+            progress_callback(current=total_steps, total=total_steps)
 
         print("仿真推演全部完成！")
-        
-        # 将结果存为实例属性，方便后续灵活调用
-        self.df_results = pd.DataFrame(results)
-        if auto_export:
-            self.export_analysis_report(output_filename)
+        if getattr(self, '_fov_swapped_count', 0) > 0:
+            print(f"[数据修正] 共检测到并纠正了 {self._fov_swapped_count} 帧 FOV 上下界反向情况。")
             
+        # 将结果存为 DataFrame
+        self.df_results = pd.DataFrame(results)
+
         return self.df_results
 
     def export_analysis_report(self, filename="limb_sim_results.parquet"):

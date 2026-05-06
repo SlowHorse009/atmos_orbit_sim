@@ -52,8 +52,12 @@ class DynamicAttitudeController:
         self._is_angle_locked = False
         if self.mode == 'LOCKED' and self.locked_angle_deg is not None:
             self._is_angle_locked = True
+            # 只要显式传入 locked_angle_deg，就直接按该角度生效。
+            # 当前协议下未单独传 locked_axis，默认锁定在 ROLL 轴。
+            self._dominant_axis = 'ROLL'
+        else:
+            self._dominant_axis = None
             
-        self._dominant_axis = None  
         self._last_angle_guess = 0.0
 
     def _calc_ideal_body_attitude_rigorous(self, pos_ecef, vel_ecef, geodesy_engine, optics_sys, date, t_sec):
