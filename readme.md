@@ -74,8 +74,8 @@ atmos_orbit_sim/
 ├── scripts/                    # 辅助脚本
 │   ├── plot_mockup.py          # 数据可视化
 │   └── cleanup_parquet.py      # Parquet 文件清理工具
-├── gui_ultimate.py             # PyQt5 交互式仪表板（推荐启动方式）
-├── gui_main.py                 # 备用 GUI 入口
+├── gui_main.py                 # PyQt5 交互式仪表板（推荐启动方式）
+├── gui_ultimate.py             # 备用 GUI 入口（历史名称）
 ├── main.py                     # CLI 仿真入口
 ├── docs/
 │   └── api_spec.md             # 前端工程师 API 规范
@@ -115,7 +115,7 @@ data/orekit-data.zip
 
 ```bash
 cd atmos_orbit_sim
-python gui_ultimate.py
+python gui_main.py
 ```
 
 在 GUI 中：
