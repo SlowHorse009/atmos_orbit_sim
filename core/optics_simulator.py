@@ -87,38 +87,48 @@ class LimbOpticsSimulator:
         # 默认光轴指向天底 (+Z轴)
         camera_boresight = Vector3D.PLUS_K 
         
-        # 1. 构建【安装旋转矩阵】 (相机系 -> 本体系)
-        # 按照航天标准 Z-Y-X (Yaw-Pitch-Roll) 顺序
-        # 注意：FOV 的偏移等效于在相机的 Pitch 轴上微调焦平面视线
+        # 1. 组装安装矩阵与姿态矩阵
         mount_rot = Rotation(
-            RotationOrder.ZYX, 
-            RotationConvention.VECTOR_OPERATOR,
-            self.mount_yaw, 
-            self.mount_pitch + fov_offset_rad, 
-            self.mount_roll
+            RotationOrder.ZYX, RotationConvention.VECTOR_OPERATOR,
+            self.mount_yaw, self.mount_pitch, self.mount_roll
         )
         
-        # 2. 构建【本体姿态矩阵】 (本体系 -> LVLH系)
         body_rot = Rotation(
-            RotationOrder.ZYX, 
-            RotationConvention.VECTOR_OPERATOR,
-            sat_yaw_rad, 
-            sat_pitch_rad, 
-            sat_roll_rad
+            RotationOrder.ZYX, RotationConvention.VECTOR_OPERATOR,
+            sat_yaw_rad, sat_pitch_rad, sat_roll_rad
         )
         
-        # 3. 旋转级联 (先过螺丝安装角，再随平台一起晃动)
+        # 2. 算出没有任何偏移的靶心光线”(在 LVLH 坐标系下)
         total_rot = body_rot.applyTo(mount_rot)
+        los_center_lvlh = total_rot.applyTo(camera_boresight)
         
-        # 4. 把光线从相机空间投射到 LVLH 局部空间
-        los_lvlh = total_rot.applyTo(camera_boresight)
+        # 3.在 LVLH 空间中，围绕“地球真水平轴”上下扫掠
+        if fov_offset_rad != 0.0:
+            # 天底向量 (+Z轴) 叉乘中心视线
+            # 得到的一定是一根完美平行于地球海平面、且垂直于视线的“真水平轴”
+            earth_horizontal_axis = Vector3D.crossProduct(Vector3D.PLUS_K, los_center_lvlh)
+            
+            # 除非相机笔直看着地心(长度为0)，否则执行上下扫掠
+            if earth_horizontal_axis.getNorm() > 1e-8:
+                earth_horizontal_axis = earth_horizontal_axis.scalarMultiply(1.0 / earth_horizontal_axis.getNorm())
+                
+                # 绕着地球真水平轴旋转，保证视线绝对是“纯垂直海拔”扫掠
+                fov_rot = Rotation(
+                    earth_horizontal_axis, 
+                    fov_offset_rad, 
+                    RotationConvention.VECTOR_OPERATOR
+                )
+                los_final_lvlh = fov_rot.applyTo(los_center_lvlh)
+            else:
+                los_final_lvlh = los_center_lvlh
+        else:
+            los_final_lvlh = los_center_lvlh
+            
+        # 4. 将最终光线映射回 ECEF 绝对空间
+        term_x = x_dir.scalarMultiply(los_final_lvlh.getX())
+        term_y = y_dir.scalarMultiply(los_final_lvlh.getY())
+        term_z = z_dir.scalarMultiply(los_final_lvlh.getZ())
         
-        # 5. 将 LVLH 局部向量映射回 ECEF 绝对空间坐标系
-        term_x = x_dir.scalarMultiply(los_lvlh.getX())
-        term_y = y_dir.scalarMultiply(los_lvlh.getY())
-        term_z = z_dir.scalarMultiply(los_lvlh.getZ())
-        
-        # 再次执行强制归一化，确保光束是一条标准的单位射线
         los_unnorm = term_x.add(term_y).add(term_z)
         return los_unnorm.scalarMultiply(1.0 / los_unnorm.getNorm())
 

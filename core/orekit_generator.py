@@ -95,7 +95,11 @@ class OrekitOrbitGenerator:
                 raise ValueError(f"{self.prop_model} 模式必须传入完整的开普勒六根数！")
                 
             # 解析前端传来的 ISO 时间字符串 (去掉可能带有的 Z 时区标识)
-            clean_epoch = epoch_iso.replace("Z", "")
+            if epoch_iso is None or str(epoch_iso).strip() == "":
+                epoch_iso = "2026-04-28T12:00:00.000"
+                print(f"[警告] 未提供 epoch_iso，已回退到默认历元: {epoch_iso}")
+
+            clean_epoch = str(epoch_iso).replace("Z", "")
             self.initial_date = AbsoluteDate(clean_epoch, self.utc)
             
             self.orbit = KeplerianOrbit(
