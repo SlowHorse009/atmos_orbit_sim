@@ -4,8 +4,8 @@
 
 ## 1. 适用范围
 
-- 当前推荐界面：`gui_ultimate.py`
-- 备用界面：`gui_main.py`
+- 当前推荐界面：`gui_main.py`
+- 备用界面：`gui_ultimate.py`
 - 后端接口：`services/simulation_service.py`、`services/result_service.py`、`services/export_service.py`
 - API 字段说明：`docs/api_spec.md`
 
@@ -79,7 +79,7 @@
 
 - 导出按钮触发 `export_job_data(job_id, path, "csv")`
 
-## 5. Payload 结构 (与 `gui_ultimate.py` 对齐)
+## 5. Payload 结构 (与 `gui_main.py` 对齐)
 
 ```json
 {
@@ -90,9 +90,9 @@
     "step_sec": 1,
     "a": 6878137.0,
     "e": 0.001,
-    "i": 1.7017,
-    "raan": 0.5236,
-    "arg_pe": 1.5708,
+    "i": 97.5,
+    "raan": 30.0,
+    "arg_pe": 90.0,
     "m0": 0.0,
     "tle_line1": null,
     "tle_line2": null,
@@ -131,7 +131,7 @@
 }
 ```
 
-注：当前 `gui_ultimate.py` 在 `build_payload()` 中会把 `i/raan/arg_pe/m0` 从度转成弧度后发送。
+注：前端统一发送角度（度）；后端在接收处转换为弧度以供计算。`gui_main.py` 为推荐前端入口。
 
 ## 6. 图表联动规范
 
@@ -171,4 +171,4 @@
 
 - 前端实现按本文档行为作为验收标准。
 - 字段与单位以 `docs/api_spec.md` 为准。
-- 当行为与代码冲突时，优先对齐 `gui_ultimate.py` 的当前实现，并同步更新本文档。
+- 当行为与代码冲突时，优先对齐 `gui_main.py` 的当前实现，并同步更新本文档。
