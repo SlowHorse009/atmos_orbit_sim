@@ -36,8 +36,11 @@ class SimulationEngine:
         # 3. 实例化光学载荷模拟器 
         optics_cfg = self.config["payload_optics"]
         mount_cfg = optics_cfg.get("mounting_angles", {})
+        self.wavelength_nm = optics_cfg.get("wavelength_nm")
         self.optics_sys = LimbOpticsSimulator(
             fov_deg=optics_cfg.get("fov_deg"),
+            vertical_fov_deg=optics_cfg.get("vertical_fov_deg"),
+            horizontal_fov_deg=optics_cfg.get("horizontal_fov_deg"),
             focal_length_mm=optics_cfg.get("focal_length_mm"),
             sensor_size_mm=optics_cfg.get("sensor_size_mm"),
             mount_roll_deg=mount_cfg.get("mount_roll_deg", 68.0),
@@ -119,6 +122,20 @@ class SimulationEngine:
         print(f"[引擎配置] 仿真总时长设定为: {self.duration} 秒")
         print("[引擎就绪] 物理模型初始化完毕。")
 
+    def _format_absolute_date_utc(self, absolute_date):
+        """Format an Orekit AbsoluteDate as an ISO-8601 UTC timestamp."""
+        try:
+            date_text = absolute_date.toString(self.orbit_sys.utc)
+        except Exception:
+            date_text = str(absolute_date)
+
+        date_text = str(date_text).strip()
+        if date_text.endswith("Z"):
+            return date_text
+        if date_text.endswith(" UTC"):
+            date_text = date_text[:-4]
+        return f"{date_text}Z"
+
     def run_simulation(self, progress_callback=None):
         """
         执行主推演循环，生成并缓存全量遥测数据
@@ -136,8 +153,10 @@ class SimulationEngine:
             t = row['time_sec']
             x, y, z = row['x'], row['y'], row['z']
             vx, vy, vz = row['vx'], row['vy'], row['vz']
+            sat_speed_mps = math.sqrt(vx * vx + vy * vy + vz * vz)
             
             current_date = self.orbit_sys.initial_date.shiftedBy(float(t))
+            observation_time_utc = self._format_absolute_date_utc(current_date)
             
             # --- 大地测量与状态解算 ---
             sat_lat, sat_lon, sat_alt = self.geodesy_sys.get_sat_lla(x, y, z, current_date)
@@ -158,6 +177,19 @@ class SimulationEngine:
                 math.radians(sat_yaw)
             )
             
+            # LOS relative to the local VVLH/LVLH axes. Each value is an axis angle in [0, 180] deg.
+            los_x_comp = Vector3D.dotProduct(los_cmd_ecef, x_dir)
+            los_x_comp = max(-1.0, min(1.0, los_x_comp))
+            los_angle_to_vvlh_plus_x_deg = math.degrees(math.acos(los_x_comp))
+
+            los_z_comp = Vector3D.dotProduct(los_cmd_ecef, z_dir)
+            los_z_comp = max(-1.0, min(1.0, los_z_comp))
+            los_angle_to_vvlh_plus_z_deg = math.degrees(math.acos(los_z_comp))
+
+            los_y_comp = Vector3D.dotProduct(los_cmd_ecef, y_dir)
+            los_y_comp = max(-1.0, min(1.0, los_y_comp))
+            los_angle_to_vvlh_plus_y_deg = math.degrees(math.acos(los_y_comp))
+
             earth_omega = Vector3D(0.0, 0.0, Constants.WGS84_EARTH_ANGULAR_VELOCITY)
             vel_absolute = vel_v.add(Vector3D.crossProduct(earth_omega, pos_v))
             los_physical = self.optics_sys.apply_velocity_aberration(los_cmd_ecef, vel_absolute)
@@ -181,6 +213,9 @@ class SimulationEngine:
             alt_min, alt_max = self.optics_sys.calculate_altitude_range(
                 x, y, z, vx, vy, vz, sat_roll, sat_pitch, sat_yaw, self.geodesy_sys, current_date
             )
+            fov_left_lat, fov_left_lon, fov_right_lat, fov_right_lon = self.optics_sys.calculate_horizontal_footprint_edges(
+                x, y, z, vx, vy, vz, sat_roll, sat_pitch, sat_yaw, self.geodesy_sys, current_date
+            )
             # 确保 alt_min <= alt_max；若检测到反向则交换并计数（以便后续审计）
             try:
                 if alt_min is not None and alt_max is not None:
@@ -197,8 +232,17 @@ class SimulationEngine:
                 pass
             
             results.append({
+                "observation_time_utc": observation_time_utc,
+                "wavelength_nm": self.wavelength_nm,
+                "vertical_fov_deg": self.optics_sys.vertical_fov_deg,
+                "horizontal_fov_deg": self.optics_sys.horizontal_fov_deg,
+                "los_angle_to_vvlh_plus_x_deg": los_angle_to_vvlh_plus_x_deg,
+                "los_angle_to_vvlh_plus_y_deg": los_angle_to_vvlh_plus_y_deg,
+                "los_angle_to_vvlh_plus_z_deg": los_angle_to_vvlh_plus_z_deg,
                 "time_sec": t,
                 "sat_x": x, "sat_y": y, "sat_z": z,
+                "sat_vx": vx, "sat_vy": vy, "sat_vz": vz,
+                "sat_speed_mps": sat_speed_mps,
                 "sat_lat": sat_lat, "sat_lon": sat_lon, "sat_alt_km": sat_alt / 1000.0,
                 "sat_roll_deg": sat_roll,
                 "sat_pitch_deg": sat_pitch,
@@ -208,6 +252,10 @@ class SimulationEngine:
                 "tangent_lon": t_lon,
                 "tangent_alt_km": t_alt / 1000.0,
                 "slant_range_km": slant_range_m / 1000.0,
+                "fov_left_lat": fov_left_lat,
+                "fov_left_lon": fov_left_lon,
+                "fov_right_lat": fov_right_lat,
+                "fov_right_lon": fov_right_lon,
                 "fov_alt_min_km": alt_min / 1000.0,
                 "fov_alt_max_km": alt_max / 1000.0,
                 "sat_in_eclipse": sat_in_eclipse,

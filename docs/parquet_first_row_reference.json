@@ -1,0 +1,129 @@
+{
+  "purpose": "用于说明如何从 output/{job_id}.parquet 读取核心首行字段的参考文件。",
+  "source_table": "output/{job_id}.parquet",
+  "row_to_read": 0,
+  "python_access_example": "df = pandas.read_parquet(path); first_row = df.loc[0, fields].to_dict()",
+  "fields_order": [
+    "observation_time_utc",
+    "wavelength_nm",
+    "vertical_fov_deg",
+    "horizontal_fov_deg",
+    "los_angle_to_vvlh_plus_x_deg",
+    "los_angle_to_vvlh_plus_y_deg",
+    "los_angle_to_vvlh_plus_z_deg",
+    "sat_x",
+    "sat_y",
+    "sat_z",
+    "sat_vx",
+    "sat_vy",
+    "sat_vz"
+  ],
+  "fields": {
+    "observation_time_utc": {
+      "parquet_type": "string",
+      "json_type": "string",
+      "nullable": false,
+      "unit": "UTC ISO-8601 时间",
+      "description": "当前输出 schema 中的逐帧 UTC 观测时间。该字段由传播后的 Orekit AbsoluteDate 生成，因此每一行会随 time_sec 推进，而不是重复初始历元。"
+    },
+    "wavelength_nm": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "nm",
+      "description": "载荷工作波长，来源于 payload_optics.wavelength_nm。"
+    },
+    "vertical_fov_deg": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "deg",
+      "description": "仿真使用的垂直视场角。当未提供 vertical_fov_deg 时，旧字段 payload_optics.fov_deg 会按该字段解释。该角度用于计算 FOV 高度范围。"
+    },
+    "horizontal_fov_deg": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "deg",
+      "description": "仿真使用的水平视场角。未显式提供时，默认等于垂直视场角。该角度用于计算水平视场覆盖边界输出。"
+    },
+    "los_angle_to_vvlh_plus_x_deg": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "deg",
+      "description": "LOS 视线与局部 VVLH/LVLH +X 轴的夹角。当前局部坐标系定义为：+X 沿飞行方向，+Y 沿轨道负法向 v x r（即 -(r x v)），+Z 指向天底。"
+    },
+    "los_angle_to_vvlh_plus_y_deg": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "deg",
+      "description": "LOS 视线与局部 VVLH/LVLH +Y 轴的夹角。当前局部坐标系定义为：+X 沿飞行方向，+Y 沿轨道负法向 v x r（即 -(r x v)），+Z 指向天底。相对 -Y 轴的夹角可用 180 deg 减去该值。"
+    },
+    "los_angle_to_vvlh_plus_z_deg": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "deg",
+      "description": "LOS 视线与局部 VVLH/LVLH +Z 轴的夹角。当前局部坐标系中 +Z 指向天底，因此该字段是相对天底轴的直接夹角，不是相对当地水平面的俯角。"
+    },
+    "sat_x": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m",
+      "description": "卫星在 WGS84 ITRF/ECEF 坐标系下的 X 坐标。"
+    },
+    "sat_y": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m",
+      "description": "卫星在 WGS84 ITRF/ECEF 坐标系下的 Y 坐标。"
+    },
+    "sat_z": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m",
+      "description": "卫星在 WGS84 ITRF/ECEF 坐标系下的 Z 坐标。"
+    },
+    "sat_vx": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m/s",
+      "description": "卫星在 ECEF/ITRF 坐标系下的 X 向速度分量。"
+    },
+    "sat_vy": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m/s",
+      "description": "卫星在 ECEF/ITRF 坐标系下的 Y 向速度分量。"
+    },
+    "sat_vz": {
+      "parquet_type": "double",
+      "json_type": "number",
+      "nullable": false,
+      "unit": "m/s",
+      "description": "卫星在 ECEF/ITRF 坐标系下的 Z 向速度分量。"
+    }
+  },
+  "first_row_example_from_config_tc02_locked_forward_duration_0s": {
+    "observation_time_utc": "2026-05-01T12:00:00.000Z",
+    "wavelength_nm": 760.0,
+    "vertical_fov_deg": 0.9310359298086419,
+    "horizontal_fov_deg": 0.9310359298086419,
+    "los_angle_to_vvlh_plus_x_deg": 90.0,
+    "los_angle_to_vvlh_plus_y_deg": 159.38996084836118,
+    "los_angle_to_vvlh_plus_z_deg": 69.38996084836118,
+    "sat_x": -155481.616311886,
+    "sat_y": -874757.4760043194,
+    "sat_z": 6813576.387442917,
+    "sat_vx": -7588.207974615081,
+    "sat_vy": 1215.7571796529444,
+    "sat_vz": -17.073876079374834
+  }
+}

@@ -23,6 +23,7 @@
     }
   },
   "payload_optics": {
+    "wavelength_nm": 760.0,
     "fov_deg": null,
     "focal_length_mm": 2000.0,
     "sensor_size_mm": 32.5,

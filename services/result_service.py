@@ -45,9 +45,19 @@ def get_series_data(job_id: str, fields: list, max_points: int = 1000) -> dict:
         
     # 4. 组装 JSON 结构供前端使用
     series_dict = {}
+    nullable_geo_fields = {
+        "fov_left_lon", "fov_left_lat",
+        "fov_right_lon", "fov_right_lat",
+    }
     for field in valid_fields:
         # fillna(0) 防止出现 NaN 导致前端图表崩溃
-        series_dict[field] = df_subset[field].fillna(0).tolist()
+        if field in nullable_geo_fields:
+            series_dict[field] = [
+                None if pd.isna(value) else value
+                for value in df_subset[field].tolist()
+            ]
+        else:
+            series_dict[field] = df_subset[field].fillna(0).tolist()
         
     return {
         "job_id": job_id,

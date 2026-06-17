@@ -38,6 +38,7 @@ class AtmosOrbitApp(QWidget):
         super().__init__()
         self.current_job_id = None
         self.hover_artists = []  # 用于追踪 hover 相关的图形元素
+        self.hover_cid = None
 
         self.init_ui()
 
@@ -86,8 +87,8 @@ class AtmosOrbitApp(QWidget):
         self.arg_pe = QDoubleSpinBox()
         self.m0 = QDoubleSpinBox()
 
-        config_spin(self.a, 6e6, 8e6, 6878137.0, 1, suffix=" m")
-        config_spin(self.e, 0, 0.1, 0.001, 6)
+        config_spin(self.a, 6.4e6, 8e10, 6878137.0, 1, suffix=" m")
+        config_spin(self.e, 0, 0.99, 0.001, 6)
         config_spin(self.i, 0, 180, 97.5, 3, suffix=" °")
         config_spin(self.raan, 0, 360, 30, 3, suffix=" °")
         config_spin(self.arg_pe, 0, 360, 90, 3, suffix=" °")
@@ -112,8 +113,8 @@ class AtmosOrbitApp(QWidget):
         self.cd = QDoubleSpinBox()
         self.cr = QDoubleSpinBox()
 
-        config_spin(self.mass, 100, 5000, 1200, 1, suffix=" kg")
-        config_spin(self.area, 0.1, 20, 6.5, 2, suffix=" m²")
+        config_spin(self.mass, 0.1, 50000, 1200, 1, suffix=" kg")
+        config_spin(self.area, 0.0001, 20, 6.5, 2, suffix=" m²")
         config_spin(self.cd, 0.5, 5, 2.2, 2)
         config_spin(self.cr, 0.5, 3, 1.2, 2)
 
@@ -129,8 +130,8 @@ class AtmosOrbitApp(QWidget):
         self.drag = QCheckBox("Drag")
         self.srp = QCheckBox("SRP")
 
-        self.gravity_degree.setRange(0, 100)
-        self.gravity_order.setRange(0, 100)
+        self.gravity_degree.setRange(0, 21)
+        self.gravity_order.setRange(0, 21)
         self.gravity_degree.setValue(21)
         self.gravity_order.setValue(21)
 
@@ -162,23 +163,29 @@ class AtmosOrbitApp(QWidget):
         self.fov_mode.currentTextChanged.connect(self.update_fov)
 
         self.fov = QDoubleSpinBox()
+        self.horizontal_fov = QDoubleSpinBox()
         self.focal = QDoubleSpinBox()
         self.sensor = QDoubleSpinBox()
+        self.wavelength = QDoubleSpinBox()
 
         # 相机安装角（默认与配置文件一致）
         self.mount_roll = QDoubleSpinBox()
         self.mount_pitch = QDoubleSpinBox()
         self.mount_yaw = QDoubleSpinBox()
 
+        config_spin(self.wavelength, 100, 20000, 760.0, 2, 1.0, " nm")
         config_spin(self.fov, 0.1, 60, 2, 2, suffix=" °")
-        config_spin(self.focal, 10, 5000, 2000, 1, suffix=" mm")
+        config_spin(self.horizontal_fov, 0.1, 60, 2, 2, suffix=" °")
+        config_spin(self.focal, 10, 50000, 2000, 1, suffix=" mm")
         config_spin(self.sensor, 1, 100, 32.5, 2, suffix=" mm")
         config_spin(self.mount_roll, -180, 180, 68.0, 2, suffix=" °")
         config_spin(self.mount_pitch, -180, 180, 0.0, 2, suffix=" °")
         config_spin(self.mount_yaw, -180, 180, 0.0, 2, suffix=" °")
 
         ol.addRow("模式", self.fov_mode)
-        ol.addRow("视场角", self.fov)
+        ol.addRow("工作波长", self.wavelength)
+        ol.addRow("垂直视场角", self.fov)
+        ol.addRow("水平视场角", self.horizontal_fov)
         ol.addRow("焦距", self.focal)
         ol.addRow("传感器尺寸", self.sensor)
         ol.addRow("安装滚转角", self.mount_roll)
@@ -204,7 +211,7 @@ class AtmosOrbitApp(QWidget):
         self.drift_rate = QDoubleSpinBox()
         self.jitter_3sigma = QDoubleSpinBox()
 
-        config_spin(self.target, 100, 1000, 400, 1, suffix=" km")
+        config_spin(self.target, 20, 1000, 400, 1, suffix=" km")
         config_spin(self.locked, -90, 90, 68, 2, suffix=" °")
         self.use_target.setChecked(True)
         self.use_locked.setChecked(False)
@@ -285,10 +292,14 @@ class AtmosOrbitApp(QWidget):
         
         # gravity_degree 范围：ANALYTICAL 最大 5，HPOP 最大 21
         if is_analytical:
+            self.gravity_degree.setMinimum(2)
             self.gravity_degree.setMaximum(5)
             if self.gravity_degree.value() > 5:
                 self.gravity_degree.setValue(5)
+            if self.gravity_degree.value() < 2:
+                self.gravity_degree.setValue(2)
         elif is_hpop:
+            self.gravity_degree.setMinimum(0)
             self.gravity_degree.setMaximum(21)
         
         # gravity_order、thirdbody、drag、srp 只在 HPOP 时启用
@@ -322,6 +333,7 @@ class AtmosOrbitApp(QWidget):
     def update_fov(self):
         f = self.fov_mode.currentText() == "视场角模式"
         self.fov.setEnabled(f)
+        self.horizontal_fov.setEnabled(f)
         self.focal.setEnabled(not f)
         self.sensor.setEnabled(not f)
 
@@ -393,7 +405,10 @@ class AtmosOrbitApp(QWidget):
                 "perturbations": perturbations
             },
             "payload_optics": {
+                "wavelength_nm": self.wavelength.value(),
                 "fov_deg": self.fov.value() if self.fov_mode.currentText() == "视场角模式" else None,
+                "vertical_fov_deg": self.fov.value() if self.fov_mode.currentText() == "视场角模式" else None,
+                "horizontal_fov_deg": self.horizontal_fov.value() if self.fov_mode.currentText() == "视场角模式" else None,
                 "focal_length_mm": self.focal.value() if self.fov_mode.currentText() != "视场角模式" else None,
                 "sensor_size_mm": self.sensor.value() if self.fov_mode.currentText() != "视场角模式" else None,
                 "mounting_angles": {
@@ -446,8 +461,17 @@ class AtmosOrbitApp(QWidget):
     # 画图（完全保留你原版）
     # ==========================================
     def render(self):
+        self.clear_hover_artists()
+        if self.hover_cid is not None:
+            try:
+                self.canvas.mpl_disconnect(self.hover_cid)
+            except Exception:
+                pass
+            self.hover_cid = None
+
         data = get_series_data(self.current_job_id, [
             "sat_lon","sat_lat","tangent_lon","tangent_lat","sat_in_eclipse","tangent_in_eclipse","tangent_alt_km",
+            "fov_left_lon","fov_left_lat","fov_right_lon","fov_right_lat",
             "fov_alt_min_km","fov_alt_max_km",
             "sat_roll_deg","sat_pitch_deg","sat_yaw_deg",
             "attitude_noise_deg","sat_alt_km","slant_range_km"
@@ -476,6 +500,129 @@ class AtmosOrbitApp(QWidget):
 
         ax1 = self.figure.add_subplot(221)
         axes_list = [ax1]  # 用于保存四个主子图
+
+        def _plot_lonlat_segments(ax, lons, lats, **kwargs):
+            label = kwargs.pop("label", None)
+            plotted = False
+            seg_lons = []
+            seg_lats = []
+
+            def flush_segment():
+                nonlocal plotted
+                if len(seg_lons) >= 2:
+                    plot_kwargs = dict(kwargs)
+                    if label and not plotted:
+                        plot_kwargs["label"] = label
+                    elif label:
+                        plot_kwargs["label"] = "_nolegend_"
+                    ax.plot(seg_lons, seg_lats, **plot_kwargs)
+                    plotted = True
+                seg_lons.clear()
+                seg_lats.clear()
+
+            for lon, lat in zip(lons, lats):
+                try:
+                    lon_val = float(lon)
+                    lat_val = float(lat)
+                except (TypeError, ValueError):
+                    flush_segment()
+                    continue
+                if not (math.isfinite(lon_val) and math.isfinite(lat_val)):
+                    flush_segment()
+                    continue
+                if seg_lons and abs(lon_val - seg_lons[-1]) > 180.0:
+                    flush_segment()
+                seg_lons.append(lon_val)
+                seg_lats.append(lat_val)
+            flush_segment()
+
+        def _fill_lonlat_edge_segments(ax, left_lons, left_lats, right_lons, right_lats, **kwargs):
+            label = kwargs.pop("label", None)
+            plotted = False
+            seg_left = []
+            seg_right = []
+
+            def flush_segment():
+                nonlocal plotted
+                if len(seg_left) >= 2 and len(seg_right) >= 2:
+                    plot_kwargs = dict(kwargs)
+                    if label and not plotted:
+                        plot_kwargs["label"] = label
+                    elif label:
+                        plot_kwargs["label"] = "_nolegend_"
+                    poly_lons = [p[0] for p in seg_left] + [p[0] for p in reversed(seg_right)]
+                    poly_lats = [p[1] for p in seg_left] + [p[1] for p in reversed(seg_right)]
+                    ax.fill(poly_lons, poly_lats, **plot_kwargs)
+                    plotted = True
+                seg_left.clear()
+                seg_right.clear()
+
+            for llon, llat, rlon, rlat in zip(left_lons, left_lats, right_lons, right_lats):
+                try:
+                    left = (float(llon), float(llat))
+                    right = (float(rlon), float(rlat))
+                except (TypeError, ValueError):
+                    flush_segment()
+                    continue
+                if not all(math.isfinite(v) for v in [left[0], left[1], right[0], right[1]]):
+                    flush_segment()
+                    continue
+                if seg_left and (
+                    abs(left[0] - seg_left[-1][0]) > 180.0 or
+                    abs(right[0] - seg_right[-1][0]) > 180.0 or
+                    abs(left[0] - right[0]) > 180.0
+                ):
+                    flush_segment()
+                seg_left.append(left)
+                seg_right.append(right)
+            flush_segment()
+
+        if all(name in s for name in ["fov_left_lon", "fov_left_lat", "fov_right_lon", "fov_right_lat"]):
+            if "tangent_lon" in s and "tangent_lat" in s:
+                _plot_lonlat_segments(
+                    ax1, s["tangent_lon"], s["tangent_lat"],
+                    color="#4f46e5", linewidth=12.0, alpha=0.18,
+                    solid_capstyle="round", zorder=1.1,
+                    label="水平视场强调带"
+                )
+            _fill_lonlat_edge_segments(
+                ax1,
+                s["fov_left_lon"], s["fov_left_lat"],
+                s["fov_right_lon"], s["fov_right_lat"],
+                facecolor="#8c8cff", alpha=0.26, edgecolor="none", zorder=1.2,
+                label="水平视场范围"
+            )
+            connector_step = max(1, len(s["fov_left_lon"]) // 32)
+            for llon, llat, rlon, rlat in zip(
+                s["fov_left_lon"][::connector_step],
+                s["fov_left_lat"][::connector_step],
+                s["fov_right_lon"][::connector_step],
+                s["fov_right_lat"][::connector_step]
+            ):
+                try:
+                    left = (float(llon), float(llat))
+                    right = (float(rlon), float(rlat))
+                except (TypeError, ValueError):
+                    continue
+                if (
+                    all(math.isfinite(v) for v in [left[0], left[1], right[0], right[1]]) and
+                    abs(left[0] - right[0]) <= 180.0
+                ):
+                    ax1.plot(
+                        [left[0], right[0]], [left[1], right[1]],
+                        color="#4f46e5", linewidth=0.7, alpha=0.35, zorder=2.4
+                    )
+            _plot_lonlat_segments(
+                ax1, s["fov_left_lon"], s["fov_left_lat"],
+                color="#4c1d95", linewidth=2.3, alpha=0.95, linestyle="-", zorder=3.2,
+                label="水平视场左边界"
+            )
+            _plot_lonlat_segments(
+                ax1, s["fov_right_lon"], s["fov_right_lat"],
+                color="#0057d9", linewidth=2.3, alpha=0.95, linestyle="-", zorder=3.2,
+                label="水平视场右边界"
+            )
+
         sat_eclipse = [bool(v) for v in s.get("sat_in_eclipse", [])]
         tang_eclipse = [bool(v) for v in s.get("tangent_in_eclipse", [])]
         tang_step = max(1, len(s.get("sat_lon", [])) // 400)
@@ -527,25 +674,29 @@ class AtmosOrbitApp(QWidget):
                 if cat["tang"]:
                     sampled = cat["tang"][::tang_step]
                     lons, lats = zip(*sampled)
-                    ax1.scatter(lons, lats, c=color, s=36, alpha=0.95, marker='x', linewidths=1.1, zorder=3)
+                    ax1.scatter(lons, lats, c=color, s=16, alpha=0.75, marker='x', linewidths=0.8, zorder=3)
             
             # 手工添加图例
             from matplotlib.lines import Line2D
+            from matplotlib.patches import Patch
             legend_elements = [
+                Patch(facecolor='#8c8cff', edgecolor='none', alpha=0.26, label="水平视场范围"),
                 Line2D([0], [0], marker='o', color='w', markerfacecolor='#13c2c2', markersize=6, label="卫星/切点均日照"),
                 Line2D([0], [0], marker='o', color='w', markerfacecolor='#fa8c16', markersize=6, label="仅卫星地影"),
                 Line2D([0], [0], marker='o', color='w', markerfacecolor='#f59e0b', markersize=6, label="仅切点地影"),
                 Line2D([0], [0], marker='o', color='w', markerfacecolor='#f5222d', markersize=6, label="卫星/切点均地影"),
                 Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=6, label="◎ 卫星"),
-                Line2D([0], [0], marker='x', color='gray', markersize=8, linewidth=0, label="× 切点(抽样)")
+                Line2D([0], [0], marker='x', color='gray', markersize=5, linewidth=0, label="× 切点(抽样)"),
+                Line2D([0], [0], color='#4c1d95', linewidth=2.3, label="水平视场左边界"),
+                Line2D([0], [0], color='#0057d9', linewidth=2.3, label="水平视场右边界")
             ]
             ax1.legend(handles=legend_elements, loc="upper right", frameon=False, fontsize=7)
         else:
             ax1.scatter(s["sat_lon"], s["sat_lat"], c="#13c2c2", s=8, alpha=0.7, marker='o', label="卫星")
             if "tangent_lon" in s and "tangent_lat" in s:
-                ax1.scatter(s["tangent_lon"][::tang_step], s["tangent_lat"][::tang_step], c="#13c2c2", s=30, alpha=0.95, marker='x', linewidths=1.1, label="切点(抽样)")
+                ax1.scatter(s["tangent_lon"][::tang_step], s["tangent_lat"][::tang_step], c="#13c2c2", s=14, alpha=0.75, marker='x', linewidths=0.8, label="切点(抽样)")
             ax1.legend(loc="upper right", frameon=False, fontsize=8)
-        ax1.set_title("1. 地球覆盖轨迹图")
+        ax1.set_title("1. 地球覆盖轨迹分析面板")
         ax1.set_xlim(-180, 180)
         ax1.set_ylim(-90, 90)
         ax1.set_xlabel("经度（度）")
@@ -554,7 +705,7 @@ class AtmosOrbitApp(QWidget):
 
         ax2 = self.figure.add_subplot(222)
         axes_list.append(ax2)
-        ax2.set_title("2. 载荷视场与光照分析面板")
+        ax2.set_title("2. 载荷视场分析面板")
         ax2.fill_between(t, fov_low, fov_high, color="#fa8c16", alpha=0.25, label="视场覆盖带")
         ax2.plot(t, s["tangent_alt_km"], color="#f5222d", linewidth=2, label="靶心高度")
         ax2.set_xlabel("时间（秒）")
@@ -564,7 +715,7 @@ class AtmosOrbitApp(QWidget):
 
         ax3 = self.figure.add_subplot(223)
         axes_list.append(ax3)
-        ax3.set_title("3. 姿态机动与噪声控制面板")
+        ax3.set_title("3. 姿态机动与噪声分析面板")
         line1 = ax3.plot(t, s["sat_roll_deg"], label="滚转角", color="tab:blue", linewidth=1.5)
         line2 = ax3.plot(t, s["sat_pitch_deg"], label="俯仰角", color="tab:green", linewidth=1.5)
         line3 = ax3.plot(t, s["sat_yaw_deg"], label="偏航角", color="tab:purple", linewidth=1.5)
@@ -581,7 +732,7 @@ class AtmosOrbitApp(QWidget):
         ax3.legend(lines, labels, loc="upper right", frameon=False)
 
         ax4 = self.figure.add_subplot(224)
-        ax4.set_title("4. 轨道衰减与目标测距面板")
+        ax4.set_title("4. 轨道高度与工作距离分析面板")
         color1 = "tab:blue"
         ax4.set_xlabel("时间（秒）")
         ax4.set_ylabel("卫星高度（km）", color=color1)
@@ -590,8 +741,8 @@ class AtmosOrbitApp(QWidget):
 
         ax4_twin = ax4.twinx()
         color2 = "tab:red"
-        ax4_twin.set_ylabel("目标斜距（km）", color=color2)
-        line2 = ax4_twin.plot(t, s["slant_range_km"], color=color2, linestyle="--", label="目标斜距", linewidth=1.5)
+        ax4_twin.set_ylabel("工作距离（km）", color=color2)
+        line2 = ax4_twin.plot(t, s["slant_range_km"], color=color2, linestyle="--", label="工作距离", linewidth=1.5)
         ax4_twin.tick_params(axis='y', labelcolor=color2)
         
         lines = line1 + line2
@@ -614,16 +765,23 @@ class AtmosOrbitApp(QWidget):
         self.canvas.draw()
         
         # 连接 hover 事件
-        self.canvas.mpl_connect('motion_notify_event', self.on_hover)
+        self.hover_cid = self.canvas.mpl_connect('motion_notify_event', self.on_hover)
         
         self.export.setEnabled(True)
+
+    def clear_hover_artists(self):
+        """Clear temporary hover artists that may already be detached by a redraw."""
+        for artist in self.hover_artists:
+            try:
+                artist.remove()
+            except (NotImplementedError, ValueError, RuntimeError):
+                pass
+        self.hover_artists.clear()
 
     def on_hover(self, event):
         """鼠标 hover 时显示对应时刻的详细数据"""
         # 清除之前的 hover 元素
-        for artist in self.hover_artists:
-            artist.remove()
-        self.hover_artists.clear()
+        self.clear_hover_artists()
         
         if event.inaxes is None or not hasattr(self, 'current_time_data'):
             self.canvas.draw_idle()

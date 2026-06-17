@@ -7,7 +7,7 @@ from org.orekit.orbits import KeplerianOrbit, PositionAngleType  # type: ignore
 from org.orekit.frames import FramesFactory  # type: ignore
 from org.orekit.time import TimeScalesFactory, AbsoluteDate  # type: ignore
 from org.orekit.utils import Constants, IERSConventions  # type: ignore
-from org.orekit.propagation import SpacecraftState  # type: ignore
+from org.orekit.propagation import SpacecraftState, PropagationType  # type: ignore
 from org.orekit.models.earth import ReferenceEllipsoid # type: ignore
 from org.orekit.bodies import CelestialBodyFactory # type: ignore
 
@@ -113,8 +113,11 @@ class OrekitOrbitGenerator:
                 
             # --- B. 快速解析模型 (Analytical J2~J5) ---
             elif self.prop_model == 'ANALYTICAL':
-                provider = GravityFieldFactory.getUnnormalizedProvider(min(gravity_degree, 5), 0)
-                self.propagator = BrouwerLyddanePropagator(self.orbit, self.mass_kg, provider, 0.0)
+                analytical_degree = max(2, min(int(gravity_degree), 5))
+                provider = GravityFieldFactory.getUnnormalizedProvider(analytical_degree, 0)
+                self.propagator = BrouwerLyddanePropagator(
+                    self.orbit, provider, PropagationType.MEAN, 0.0
+                )
 
             # --- C. 高保真数值模型 (HPOP) ---
             elif self.prop_model == 'HPOP':

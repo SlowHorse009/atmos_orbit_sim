@@ -9,7 +9,8 @@ class LimbOpticsSimulator:
     """
     高保真临边观测光学映射解析器 
     """
-    def __init__(self, fov_deg=None, focal_length_mm=None, sensor_size_mm=None,
+    def __init__(self, fov_deg=None, vertical_fov_deg=None, horizontal_fov_deg=None,
+                 focal_length_mm=None, sensor_size_mm=None,
                  mount_roll_deg=68.0, mount_pitch_deg=0.0, mount_yaw_deg=0.0):
         """
         初始化光学系统，绑定静态硬件属性
@@ -22,7 +23,8 @@ class LimbOpticsSimulator:
         # ==========================================
         # 1. 视场解析逻辑
         # ==========================================
-        has_fov = fov_deg is not None
+        vertical_fov_value = vertical_fov_deg if vertical_fov_deg is not None else fov_deg
+        has_fov = vertical_fov_value is not None
         has_lens = focal_length_mm is not None and sensor_size_mm is not None
 
         # 冲突检测
@@ -33,22 +35,30 @@ class LimbOpticsSimulator:
 
         # 模式 A：直接 FOV
         if has_fov:
-            self.fov_deg = float(fov_deg)
-            self.fov_rad = math.radians(self.fov_deg)
+            self.vertical_fov_deg = float(vertical_fov_value)
+            self.horizontal_fov_deg = float(horizontal_fov_deg) if horizontal_fov_deg is not None else self.vertical_fov_deg
 
         # 模式 B：镜头推导
         elif has_lens:
             self.f_mm = float(focal_length_mm)
             self.sensor_size_mm = float(sensor_size_mm)
 
-            self.fov_rad = 2.0 * math.atan(self.sensor_size_mm / (2.0 * self.f_mm))
-            self.fov_deg = math.degrees(self.fov_rad)
+            lens_fov_rad = 2.0 * math.atan(self.sensor_size_mm / (2.0 * self.f_mm))
+            lens_fov_deg = math.degrees(lens_fov_rad)
+            self.vertical_fov_deg = lens_fov_deg
+            self.horizontal_fov_deg = float(horizontal_fov_deg) if horizontal_fov_deg is not None else lens_fov_deg
 
         # 错误抛出
         else:
             raise ValueError(
                 "缺少视场参数：必须提供 fov_deg 或 (focal_length_mm + sensor_size_mm)"
             )
+
+        self.vertical_fov_rad = math.radians(self.vertical_fov_deg)
+        self.horizontal_fov_rad = math.radians(self.horizontal_fov_deg)
+        # Backward-compatible aliases. The legacy scalar FOV is now vertical FOV.
+        self.fov_deg = self.vertical_fov_deg
+        self.fov_rad = self.vertical_fov_rad
 
         # ==========================================
         # 2. 硬件静态安装角入表
@@ -65,8 +75,8 @@ class LimbOpticsSimulator:
         z_vec = pos_ecef.scalarMultiply(-1.0)
         z_dir = z_vec.scalarMultiply(1.0 / z_vec.getNorm())
         
-        # Y轴 (轨道法向)：位置与速度的叉乘
-        y_vec = pos_ecef.crossProduct(vel_ecef)
+        # Y轴 (轨道负法向)：保证 +X 沿飞行方向、+Z 指向天底时形成右手系
+        y_vec = vel_ecef.crossProduct(pos_ecef)
         y_dir = y_vec.scalarMultiply(1.0 / y_vec.getNorm())
         
         # X轴 (飞行方向)：完成右手系
@@ -75,7 +85,8 @@ class LimbOpticsSimulator:
         
         return x_dir, y_dir, z_dir
 
-    def _get_true_los_vector(self, x_dir, y_dir, z_dir, sat_roll_rad, sat_pitch_rad, sat_yaw_rad, fov_offset_rad=0.0):
+    def _get_true_los_vector(self, x_dir, y_dir, z_dir, sat_roll_rad, sat_pitch_rad, sat_yaw_rad,
+                             fov_offset_rad=0.0, horizontal_fov_offset_rad=0.0):
         """
         [6-DOF 视线解算器] 将相机的静态安装与卫星的动态姿态严密叠加
         
@@ -102,27 +113,31 @@ class LimbOpticsSimulator:
         total_rot = body_rot.applyTo(mount_rot)
         los_center_lvlh = total_rot.applyTo(camera_boresight)
         
+        los_final_lvlh = los_center_lvlh
+        earth_horizontal_axis = Vector3D.crossProduct(Vector3D.PLUS_K, los_center_lvlh)
+
         # 3.在 LVLH 空间中，围绕“地球真水平轴”上下扫掠
-        if fov_offset_rad != 0.0:
-            # 天底向量 (+Z轴) 叉乘中心视线
-            # 得到的一定是一根完美平行于地球海平面、且垂直于视线的“真水平轴”
-            earth_horizontal_axis = Vector3D.crossProduct(Vector3D.PLUS_K, los_center_lvlh)
-            
-            # 除非相机笔直看着地心(长度为0)，否则执行上下扫掠
-            if earth_horizontal_axis.getNorm() > 1e-8:
-                earth_horizontal_axis = earth_horizontal_axis.scalarMultiply(1.0 / earth_horizontal_axis.getNorm())
-                
-                # 绕着地球真水平轴旋转，保证视线绝对是“纯垂直海拔”扫掠
+        if earth_horizontal_axis.getNorm() > 1e-8:
+            earth_horizontal_axis = earth_horizontal_axis.scalarMultiply(1.0 / earth_horizontal_axis.getNorm())
+
+            if fov_offset_rad != 0.0:
                 fov_rot = Rotation(
-                    earth_horizontal_axis, 
-                    fov_offset_rad, 
+                    earth_horizontal_axis,
+                    fov_offset_rad,
                     RotationConvention.VECTOR_OPERATOR
                 )
-                los_final_lvlh = fov_rot.applyTo(los_center_lvlh)
-            else:
-                los_final_lvlh = los_center_lvlh
-        else:
-            los_final_lvlh = los_center_lvlh
+                los_final_lvlh = fov_rot.applyTo(los_final_lvlh)
+
+            if horizontal_fov_offset_rad != 0.0:
+                horizontal_rot_axis = Vector3D.crossProduct(los_center_lvlh, earth_horizontal_axis)
+                if horizontal_rot_axis.getNorm() > 1e-8:
+                    horizontal_rot_axis = horizontal_rot_axis.scalarMultiply(1.0 / horizontal_rot_axis.getNorm())
+                    fov_rot = Rotation(
+                        horizontal_rot_axis,
+                        horizontal_fov_offset_rad,
+                        RotationConvention.VECTOR_OPERATOR
+                    )
+                    los_final_lvlh = fov_rot.applyTo(los_final_lvlh)
             
         # 4. 将最终光线映射回 ECEF 绝对空间
         term_x = x_dir.scalarMultiply(los_final_lvlh.getX())
@@ -148,7 +163,7 @@ class LimbOpticsSimulator:
         s_yaw = math.radians(sat_yaw_deg)
         
         # 半视场角
-        fov_half = self.fov_rad / 2.0
+        fov_half = self.vertical_fov_rad / 2.0
         
         # 2. 调用 6-DOF 解算器获取绝对包络光线
         # 注意：视野的 bottom (低切点) 意味着视线需要更往下压，相当于 pitch 角度正向增加
@@ -176,6 +191,48 @@ class LimbOpticsSimulator:
         )
         
         return alt_min, alt_max
+
+    def calculate_horizontal_footprint_edges(self, x, y, z, vx, vy, vz, sat_roll_deg, sat_pitch_deg, sat_yaw_deg, geodesy_engine, date):
+        """
+        Calculate left/right tangent points from the horizontal FOV edges.
+        """
+        pos_ecef = Vector3D(float(x), float(y), float(z))
+        vel_ecef = Vector3D(float(vx), float(vy), float(vz))
+
+        x_dir, y_dir, z_dir = self._build_local_orbital_frame(pos_ecef, vel_ecef)
+
+        s_roll = math.radians(sat_roll_deg)
+        s_pitch = math.radians(sat_pitch_deg)
+        s_yaw = math.radians(sat_yaw_deg)
+
+        fov_half = self.horizontal_fov_rad / 2.0
+        los_left_ecef = self._get_true_los_vector(
+            x_dir, y_dir, z_dir, s_roll, s_pitch, s_yaw,
+            horizontal_fov_offset_rad=-fov_half
+        )
+        los_right_ecef = self._get_true_los_vector(
+            x_dir, y_dir, z_dir, s_roll, s_pitch, s_yaw,
+            horizontal_fov_offset_rad=fov_half
+        )
+
+        earth_omega = Vector3D(0.0, 0.0, Constants.WGS84_EARTH_ANGULAR_VELOCITY)
+        vel_absolute = vel_ecef.add(Vector3D.crossProduct(earth_omega, pos_ecef))
+
+        los_left_phys = self.apply_velocity_aberration(los_left_ecef, vel_absolute)
+        los_right_phys = self.apply_velocity_aberration(los_right_ecef, vel_absolute)
+
+        left_lat, left_lon, _, _ = geodesy_engine.get_limb_tangent_lla_brent(
+            pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
+            los_left_phys.getX(), los_left_phys.getY(), los_left_phys.getZ(),
+            date
+        )
+        right_lat, right_lon, _, _ = geodesy_engine.get_limb_tangent_lla_brent(
+            pos_ecef.getX(), pos_ecef.getY(), pos_ecef.getZ(),
+            los_right_phys.getX(), los_right_phys.getY(), los_right_phys.getZ(),
+            date
+        )
+
+        return left_lat, left_lon, right_lat, right_lon
     
     def apply_velocity_aberration(self, los_cmd_ecef, vel_absolute):
         """
