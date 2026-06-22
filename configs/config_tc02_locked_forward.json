@@ -10,6 +10,8 @@
     "raan": 30.000070,
     "arg_pe": 90.000210,
     "m0": 0.0,
+    "tle_line1": null,
+    "tle_line2": null,
     "mass_kg": 1200.0,
     "cross_section_m2": 6.5,
     "cd": 2.2,
@@ -25,6 +27,8 @@
   "payload_optics": {
     "wavelength_nm": 760.0,
     "fov_deg": null,
+    "vertical_fov_deg": null,
+    "horizontal_fov_deg": null,
     "focal_length_mm": 2000.0,
     "sensor_size_mm": 32.5,
     "mounting_angles": {
